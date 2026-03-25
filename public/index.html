@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALBEDO TV - Vercel Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <style>
+        body { background: #050505; color: #eee; font-family: sans-serif; }
+        .movie-card:hover { transform: scale(1.05); transition: 0.3s; outline: 2px solid #E50914; }
+        .active-tab { color: #E50914; border-bottom: 3px solid #E50914; }
+        video { width: 100%; border-radius: 12px; background: #000; box-shadow: 0 0 30px rgba(229,9,20,0.2); }
+    </style>
+</head>
+<body class="p-5">
+    <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <h1 class="text-4xl font-black text-red-600 tracking-tighter cursor-pointer" onclick="location.reload()">ALBEDO TV</h1>
+        <input type="text" id="searchInput" placeholder="Cari drama..." class="bg-zinc-900 p-3 rounded-full px-6 outline-none w-full md:w-1/3 border border-zinc-800">
+    </header>
+
+    <nav class="flex gap-6 overflow-x-auto mb-8 border-b border-zinc-900 pb-2 no-scrollbar font-bold text-sm">
+        <button onclick="changeCat('FOR_YOU')" class="nav-item active-tab whitespace-nowrap">FOR YOU</button>
+        <button onclick="changeCat('VIP')" class="nav-item whitespace-nowrap text-yellow-500">💎 VIP</button>
+        <button onclick="changeCat('DUB_INDO')" class="nav-item whitespace-nowrap">DUB INDO</button>
+        <button onclick="changeCat('TRENDING')" class="nav-item whitespace-nowrap">TRENDING</button>
+    </nav>
+
+    <div id="playerBox" class="hidden mb-12 bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
+        <div class="flex justify-between mb-4"><h2 id="vidTitle" class="font-bold truncate"></h2><button onclick="closePlayer()">✕</button></div>
+        <video id="mainVid" controls autoplay></video>
+        <div id="epGrid" class="flex gap-2 flex-wrap mt-4 max-h-40 overflow-y-auto p-2"></div>
+    </div>
+
+    <div id="mainGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6"></div>
+
+    <div class="flex justify-center items-center gap-8 py-12">
+        <button onclick="movePage(-1)" class="bg-zinc-800 p-3 px-6 rounded-lg font-bold">PREV</button>
+        <span id="pageNum" class="text-xl font-black text-red-600">1</span>
+        <button onclick="movePage(1)" class="bg-zinc-800 p-3 px-6 rounded-lg font-bold">NEXT</button>
+    </div>
+
+    <script>
+        let curCat = 'FOR_YOU', curPage = 1;
+
+        async function loadData() {
+            const grid = document.getElementById('mainGrid');
+            grid.innerHTML = "<p class='col-span-full text-center py-10 animate-pulse'>Memuat konten...</p>";
+            document.getElementById('pageNum').innerText = curPage;
+
+            try {
+                const res = await fetch(getFinalUrl(curCat, {page: curPage}));
+                const data = await res.json();
+                let list = [];
+                
+                if(curCat === 'VIP' && data.columnVoList) {
+                    data.columnVoList.forEach(c => { if(c.bookList) list = list.concat(c.bookList); });
+                } else {
+                    list = Array.isArray(data) ? data : (data.bookId ? [data] : []);
+                }
+
+                grid.innerHTML = "";
+                list.forEach(item => {
+                    const cover = item.coverWap || item.bookCover || item.cover;
+                    grid.innerHTML += `
+                        <div class="movie-card bg-zinc-900 rounded-xl overflow-hidden cursor-pointer" onclick="loadDetail('${item.bookId}', '${item.bookName}')">
+                            <img src="${cover}" class="w-full h-64 object-cover">
+                            <p class="p-3 text-xs font-bold truncate">${item.bookName}</p>
+                        </div>`;
+                });
+            } catch(e) { grid.innerHTML = "<p class='col-span-full text-center text-red-500'>Gagal ambil data.</p>"; }
+        }
+
+        async function loadDetail(id, title) {
+            document.getElementById('playerBox').classList.remove('hidden');
+            document.getElementById('vidTitle').innerText = title;
+            window.scrollTo({top: 0, behavior: 'smooth'});
+            
+            const res = await fetch(getFinalUrl('ALL_EPISODE', {bookId: id}));
+            const eps = await res.json();
+            const eGrid = document.getElementById('epGrid');
+            eGrid.innerHTML = "";
+            eps.forEach((ep, i) => {
+                const path = ep.cdnList[0].videoPathList[0].videoPath;
+                eGrid.innerHTML += `<button onclick="playNow('${path}')" class="bg-zinc-800 p-3 rounded-lg hover:bg-red-600 text-xs font-bold">${i+1}</button>`;
+            });
+        }
+
+        async function playNow(url) {
+            const res = await fetch(getFinalUrl('DECRYPT', {url}));
+            const data = await res.json();
+            if(data.success) {
+                document.getElementById('mainVid').src = data.streamUrl;
+            }
+        }
+
+        function changeCat(cat) { 
+            curCat = cat; curPage = 1; 
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active-tab'));
+            event.target.classList.add('active-tab');
+            loadData(); 
+        }
+        function movePage(s) { if(curPage + s > 0) { curPage += s; loadData(); } }
+        function closePlayer() { document.getElementById('mainVid').pause(); document.getElementById('playerBox').classList.add('hidden'); }
+
+        document.getElementById('searchInput').onkeypress = (e) => {
+            if(e.key === 'Enter') { curCat = 'SEARCH'; loadData({query: e.target.value}); }
+        };
+
+        loadData();
+    </script>
+</body>
+</html>
